@@ -30,7 +30,17 @@ core <- raw %>%
     DW       = parse_traits(DW),
     AutumnPH = parse_traits(Mean_Autumn)
   ) %>%
-  select(Year, Genotype, Rep, SummerPH, FW, DW, AutumnPH)
+  # FIX (2026-08-01): In the 2002 CSV, FW and DW columns are swapped.
+  # Evidence: 162/510 rows in 2002 have DW > FW (physically impossible),
+  # whereas 2003-2005 have zero such rows.
+  # Correction: swap FW and DW for all 2002 records to restore the
+  # expected relationship FW >= DW.
+  mutate(
+    FW_tmp = FW,
+    FW = if_else(Year == 2002, DW, FW),
+    DW = if_else(Year == 2002, FW_tmp, DW)
+  ) %>%
+  select(Year, Genotype, Rep, SummerPH, FW, DW, AutumnPH, -FW_tmp)
 
 # --- Aggregate to the experimental unit: Genotype x Rep x Year ------------
 # Each (Genotype, Rep, Year) contains multiple distinct sampling rows
