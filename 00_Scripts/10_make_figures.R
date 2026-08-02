@@ -83,6 +83,7 @@ label_data <- dd$labels %>%
   mutate(
     cluster = factor(leaf_cl[label]),
     raw_angle = 90 - (360 * x / n_labels),
+    # 调整标签朝向：使文字始终可读
     hjust = ifelse(raw_angle < -90 | raw_angle > 90, 1, 0),
     final_angle = ifelse(raw_angle < -90 | raw_angle > 90, raw_angle + 180, raw_angle)
   )
@@ -90,20 +91,24 @@ label_data <- dd$labels %>%
 f4 <- ggplot() +
   geom_segment(data = segment(dd), aes(x = x, y = y, xend = xend, yend = yend), 
                colour = "grey50", alpha = 0.6, linewidth = 0.6) +
-  # 适当调大外圈树叶字号 (size = 3.8)，肉眼极为清晰
-  geom_text(data = label_data, aes(x = x, y = -0.5, label = label, colour = cluster,
-                                   angle = final_angle, hjust = hjust), size = 3.8, fontface = "bold") +
+  # 最普通的 geom_text：固定位置，使用角度和 hjust
+  geom_text(data = label_data, 
+            aes(x = x, y = -1.0,          # 将标签放在更外圈（原始为 -0.5）
+                label = label, colour = cluster,
+                angle = final_angle, hjust = hjust),
+            size = 3.8, fontface = "bold") +
   coord_polar(theta = "x") +
-  scale_y_reverse(expand = expansion(mult = c(0.15, 0.45))) + 
+  scale_y_reverse(expand = expansion(mult = c(0.2, 0.60))) +   # 底部留白更多（原始 0.15, 0.45）
   labs(x = NULL, y = NULL) + 
   FIG_THEME + PAL + guides(colour = "none") +
   theme(
     axis.line = element_blank(), axis.text = element_blank(), 
-    axis.ticks = element_blank(), axis.title = element_blank(), panel.grid = element_blank()
+    axis.ticks = element_blank(), axis.title = element_blank(), 
+    panel.grid = element_blank()
   )
 
-# 画布大幅扩大至 26x26 cm，彻底告别标签拥挤
-export_fig_with_data(f4, label_data, "Fig4_cluster_dendrogram", w = 26, h = 26)
+# 画布尺寸略为增大，为标签提供物理空间
+export_fig_with_data(f4, label_data, "Fig4_cluster_dendrogram", w = 28, h = 28)
 
 # ---- Fig 5: Heritability ---------------------------------------------------
 h2p <- h2 %>% mutate(Trait = factor(Trait, levels = TRAITS))
