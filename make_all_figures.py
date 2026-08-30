@@ -1,19 +1,12 @@
-"""
-合并后的可视化脚本：整合 make_fig3_caterpillar.py 和 make_figures_v2.py
-包含7个Figure的生成功能，并优化Figure 4-6的标签防重叠算法。
+"""Generate Figures 1–7 from cohort-specific statistical reanalysis outputs.
 
-输入数据来源：04_Results/Revision_Final/Final_Statistical_Reanalysis/
-输出位置：06_Manuscript/Formal_To_NZCHS/Figures_v2/
-
-Style: Nature/Springer (no gridlines, bold axes, minimal titles),
-Okabe-Ito colorblind-friendly palette, Arial font, despine.
+Input files are expected in the directory supplied with --results-dir.
+Figures are written to --output-dir in PDF and PNG formats at 600 dpi.
 """
-import os
-import sys
 import warnings
 import json
 from pathlib import Path
-from typing import List, Tuple, Dict, Any, Optional
+from typing import Tuple, Dict, Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -21,27 +14,30 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
+import argparse
 
-# 尝试导入adjustText用于标签防重叠
+
+# Use adjustText when available for label placement.
 try:
     from adjustText import adjust_text
     HAS_ADJUST_TEXT = True
-    print("✓ adjustText库已安装，将使用标签防重叠算法")
+    print("adjustText is available; enhanced label placement enabled.")
 except ImportError:
     HAS_ADJUST_TEXT = False
-    print("⚠ adjustText库未安装，将使用简单标签偏移")
-    print("  安装命令: pip install adjustText")
+    print("adjustText is not installed; using simple label offsets.")
+    print("  Install with: pip install adjustText")
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-# ---------------- Paths ----------------
-PROJECT_ROOT = Path(r"C:\Users\lijia\Documents\R Workplace\Sino-Australian_Alfalfa_Project")
-RESULTS_DIR = PROJECT_ROOT / "04_Results" / "Revision_Final" / "Final_Statistical_Reanalysis"
-FIG_OUT_DIR = PROJECT_ROOT / "06_Manuscript" / "Formal_To_NZCHS" / "Figures_v2"
-FIG_OUT_DIR.mkdir(parents=True, exist_ok=True)
+# ---------------- Configuration ----------------
+DEFAULT_RESULTS_DIR = Path("04_Results/Revision_Final/Final_Statistical_Reanalysis")
+DEFAULT_OUTPUT_DIR = Path("Figures")
 
-# ---------------- Style ----------------
-# Okabe-Ito colorblind-friendly subset
+RESULTS_DIR = DEFAULT_RESULTS_DIR
+FIG_OUT_DIR = DEFAULT_OUTPUT_DIR
+
+# ---------------- Plot style ----------------
+# Okabe-Ito colorblind-friendly palette
 C_BLUE = "#0072B2"
 C_ORANGE = "#D55E00"
 C_AMBER = "#E69F00"
@@ -50,9 +46,9 @@ C_PINK = "#CC79A7"
 C_SKY = "#56B4E9"
 C_YELLOW = "#F0E442"
 C_GREY = "#555555"
-C_GRAY = "#9AA0A6"  # 普通基因型颜色
+C_GRAY = "#9AA0A6"  # Other genotype color
 
-# Figure 3专用颜色映射
+# Figure 3 highlight colors
 HIGHLIGHT_COLORS = {
     "Sitel": C_BLUE,
     "Xinjiang_Daye": C_ORANGE,
@@ -107,7 +103,7 @@ rcParams.update({
 
 
 def despine(ax, keep_left=True, keep_bottom=True):
-    """移除顶部和右侧边框，保持底部和左侧边框"""
+    """Remove top and right spines."""
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     if not keep_left:
@@ -117,7 +113,7 @@ def despine(ax, keep_left=True, keep_bottom=True):
 
 
 def save_fig(fig, name):
-    """保存图片为PDF和PNG格式"""
+    """Save a figure as PDF and PNG."""
     for ext in ("pdf", "png"):
         path = FIG_OUT_DIR / f"{name}.{ext}"
         fig.savefig(path, format=ext, dpi=600)
@@ -126,26 +122,20 @@ def save_fig(fig, name):
 
 
 def load_csv(name):
-    """加载CSV数据文件"""
+    """Load a CSV file from the results directory."""
     return pd.read_csv(RESULTS_DIR / name)
 
 
-def label_for(genotype):
-    """获取基因型标签（用于Figure 3）"""
-    if genotype in HIGHLIGHT_COLORS:
-        return genotype
-    return genotype
-
 
 def color_for(genotype):
-    """获取基因型颜色（用于Figure 3）"""
+    """Return the highlight color for a genotype."""
     if genotype in HIGHLIGHT_COLORS:
         return HIGHLIGHT_COLORS[genotype]
     return C_GRAY
 
 
 def panel_letter(i):
-    """生成面板字母标签"""
+    """Return an alphabetical panel label."""
     return "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i]
 
 
@@ -154,12 +144,9 @@ def adjust_labels_with_leader_lines(ax, texts, points,
                                    force_points: Tuple[float, float] = (0.2, 0.25),
                                    expand: Tuple[float, float] = (1.05, 1.1),
                                    arrowprops: Optional[Dict[str, Any]] = None):
-    """
-    调整标签位置以避免重叠，并添加引线。
-    包含终极修复：动态扩展坐标轴，确保任何标签都不会飞出图外。
-    """
+    """Adjust labels, add leader lines, and expand axes when needed."""
     if not HAS_ADJUST_TEXT:
-        print("  使用简单标签偏移算法")
+        print("  Using simple label offsets.")
         for i, (text, (x, y)) in enumerate(zip(texts, points)):
             xlim = ax.get_xlim()
             ylim = ax.get_ylim()
@@ -181,7 +168,7 @@ def adjust_labels_with_leader_lines(ax, texts, points,
             
             text.set_position((x + offset_x, y + offset_y))
     else:
-        print("  使用adjustText标签防重叠算法")
+        print("  Using adjustText for label placement.")
         
         if arrowprops is None:
             arrowprops = dict(
@@ -191,7 +178,7 @@ def adjust_labels_with_leader_lines(ax, texts, points,
                 alpha=0.6
             )
         
-        # 修复1：将 avoid_axes 恢复为 True，让算法尽量在内部消化
+        # Keep adjusted labels inside the axes when possible.
         adjust_text(
             texts,
             x=[p[0] for p in points],
@@ -204,45 +191,45 @@ def adjust_labels_with_leader_lines(ax, texts, points,
             only_move={'text': 'xy'},
             avoid_self=True,
             avoid_points=True,
-            avoid_axes=True, # 已恢复
+            avoid_axes=True, 
             max_iter=800,
             tol=0.005
         )
 
-    # 修复2：终极坐标轴自适应（适用于所有图表和算法分支）
-    # 在所有标签排布完成后，抓取文本真实的渲染边界，反推需要的坐标轴范围
+    # Expand the axes to keep adjusted labels visible.
+    # Use rendered text bounds to determine required axis limits.
     try:
         fig = ax.get_figure()
-        fig.canvas.draw() # 强制执行一次渲染以获取文本的真实像素尺寸
+        fig.canvas.draw()
         renderer = fig.canvas.get_renderer()
         
-        # 获取当前的坐标轴限制
+        # Get current axis limits.
         xmin, xmax = ax.get_xlim()
         ymin, ymax = ax.get_ylim()
         
-        # 遍历所有文本，寻找极值
+        # Find the required coordinate limits.
         for text in texts:
             bbox = text.get_window_extent(renderer=renderer)
-            # 将屏幕像素边界转换回数据的XY坐标
+            # Convert display bounds to data coordinates.
             bbox_data = bbox.transformed(ax.transData.inverted())
             xmin = min(xmin, bbox_data.xmin)
             xmax = max(xmax, bbox_data.xmax)
             ymin = min(ymin, bbox_data.ymin)
             ymax = max(ymax, bbox_data.ymax)
             
-        # 根据计算出的极值，再外扩 8% 作为安全留白
+        # Add a small safety margin.
         x_margin = (xmax - xmin) * 0.08
         y_margin = (ymax - ymin) * 0.08
         
-        # 重新设定坐标轴
+        # Update axis limits.
         ax.set_xlim(xmin - x_margin, xmax + x_margin)
         ax.set_ylim(ymin - y_margin, ymax + y_margin)
         
     except Exception as e:
-        print(f"  坐标轴自适应拓展失败: {e}")
+        print(f"  Axis expansion failed: {e}")
 
 
-# ---------------- Fig 1: same-stand-age sensitivity ----------------
+# ---------------- Figure 1: same-stand-age sensitivity ----------------
 def fig1_same_stand_age():
     print("[Fig 1] same-stand-age sensitivity")
     df = load_csv("same_stand_age_sensitivity_final.csv")
@@ -269,7 +256,7 @@ def fig1_same_stand_age():
     save_fig(fig, "Fig1_same_stand_age_sensitivity")
 
 
-# ---------------- Fig 2: variance + heritability ----------------
+# ---------------- Figure 2: variance + heritability ----------------
 def fig2_variance_heritability():
     print("[Fig 2] variance + heritability")
     vc = load_csv("variance_components_final_by_cohort.csv")
@@ -346,7 +333,7 @@ def fig2_variance_heritability():
     save_fig(fig, "Fig2_variance_heritability")
 
 
-# ---------------- Fig 3: BLUP ranking (cohort-specific) ----------------
+# ---------------- Figure 3: cohort-specific BLUP ranking ----------------
 def fig3_blup_ranking():
     print("[Fig 3] BLUP ranking (caterpillar)")
     blup = load_csv("BLUP_final_by_cohort.csv")
@@ -476,7 +463,7 @@ def _gge_scores(mat):
     return g_scores, y_scores, pc_pct, g_means, mat.index, mat.columns
 
 
-# ---------------- Fig 4: AMMI biplots ----------------
+# ---------------- Figure 4: AMMI biplots ----------------
 def fig4_ammi_biplot():
     print("[Fig 4] AMMI biplots")
     traits = ["SummerPH", "FW", "DW"]
@@ -517,7 +504,7 @@ def fig4_ammi_biplot():
             texts.append(text)
             points.append((yx[j], yy[j]))
         
-        # 关键修复点：增加绘图区边界余量，防止文本在调整时被挤出视口外
+        # Add margin before label adjustment.
         ax.margins(0.2)
         
         adjust_labels_with_leader_lines(
@@ -542,7 +529,7 @@ def fig4_ammi_biplot():
     save_fig(fig, "Fig4_ammi_biplot")
 
 
-# ---------------- Fig 5: GGE biplots ----------------
+# ---------------- Figure 5: GGE biplots ----------------
 def fig5_gge_biplot():
     print("[Fig 5] GGE biplots")
     traits = ["SummerPH", "FW", "DW"]
@@ -585,7 +572,7 @@ def fig5_gge_biplot():
             texts.append(text)
             points.append((yx[j], yy[j]))
         
-        # 关键修复点：增加绘图区边界余量
+        # Add margin before label adjustment.
         ax.margins(0.2)
         
         adjust_labels_with_leader_lines(
@@ -610,7 +597,7 @@ def fig5_gge_biplot():
     save_fig(fig, "Fig5_gge_biplot")
 
 
-# ---------------- Fig 6: mean vs stability ----------------
+# ---------------- Figure 6: mean vs stability ----------------
 def fig6_mean_stability():
     print("[Fig 6] mean vs stability")
     traits = ["SummerPH", "FW", "DW"]
@@ -641,7 +628,7 @@ def fig6_mean_stability():
                 texts.append(text)
                 points.append((asv[i], g_means[i]))
             
-            # 关键修复点：增加绘图区边界余量
+            # Add margin before label adjustment.
             ax.margins(0.2)
             
             adjust_labels_with_leader_lines(
@@ -666,7 +653,7 @@ def fig6_mean_stability():
     save_fig(fig, "Fig6_mean_stability")
 
 
-# ---------------- Fig 7: BLUP correlation ----------------
+# ---------------- Figure 7: BLUP correlation ----------------
 def fig7_blup_correlation():
     print("[Fig 7] BLUP correlation")
     corr = load_csv("BLUP_correlation_by_cohort.csv")
@@ -711,14 +698,53 @@ def fig7_blup_correlation():
 
 
 # ---------------- Main ----------------
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generate Figures 1-7 from cohort-specific statistical outputs."
+    )
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        default=DEFAULT_RESULTS_DIR,
+        help="Directory containing the statistical result CSV files."
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_OUTPUT_DIR,
+        help="Directory for generated figures and metadata."
+    )
+    return parser.parse_args()
+
+
 def main():
-    print(f"Output dir: {FIG_OUT_DIR}")
+    global RESULTS_DIR, FIG_OUT_DIR
+    args = parse_args()
+    RESULTS_DIR = args.results_dir
+    FIG_OUT_DIR = args.output_dir
+    FIG_OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    required_files = [
+        "same_stand_age_sensitivity_final.csv",
+        "variance_components_final_by_cohort.csv",
+        "heritability_final_by_cohort.csv",
+        "BLUP_final_by_cohort.csv",
+        "plot_year_wide.csv",
+        "BLUP_correlation_by_cohort.csv",
+    ]
+    missing = [name for name in required_files if not (RESULTS_DIR / name).is_file()]
+    if missing:
+        parser = "Required input files are missing:\n" + "\n".join(f"  - {name}" for name in missing)
+        raise FileNotFoundError(parser)
+
+    print(f"Results directory: {RESULTS_DIR.resolve()}")
+    print(f"Output directory:  {FIG_OUT_DIR.resolve()}")
     
     if HAS_ADJUST_TEXT:
-        print("✓ adjustText库可用，Figure 4-6将使用标签防重叠算法")
+        print("adjustText is available; Figures 4-6 will use enhanced label placement.")
     else:
-        print("⚠ adjustText库不可用，Figure 4-6将使用简单标签偏移")
-        print("  安装命令: pip install adjustText")
+        print("adjustText is not available; Figures 4-6 will use simple label offsets.")
+        print("  Install with: pip install adjustText")
     
     figures = [
         ("Fig1", fig1_same_stand_age),
