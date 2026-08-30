@@ -5,7 +5,7 @@ authors:
    given-names: "Jiaqing"
    orcid: "https://orcid.org/0000-0002-4856-5524"
 title: "alfalfa-multi-year-stability-analysis"
-version: 2.1.0
-doi: 10.5281/zenodo.21965203
-date-released: 2026-08-16
+version: 3.0.0
+doi: 10.5281/zenodo.22177339
+date-released: 2026-08-30
 url: "https://github.com/Li-Chia-ching/alfalfa-multi-year-stability-analysis"
